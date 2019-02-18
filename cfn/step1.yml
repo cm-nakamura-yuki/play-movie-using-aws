@@ -1,0 +1,90 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Step1 - S3, Lambda, MediaConvert"
+Resources:
+  TriggerLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "start_movie_convert_lambda_role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+  TriggerLambdaRolePolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: "movie_convert_create_job_access"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "iam:PassRole"
+              - "mediaconvert:CreateJob"
+            Resource: "*"
+      Roles:
+        - Ref: "TriggerLambdaRole"
+  TriggerLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "start-movie-convert"
+      Description: "start movie convert"
+      Handler: "index.handler"
+      MemorySize: 128
+      Runtime: "nodejs8.10"
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/start_movie_convert_lambda_role"
+      Timeout: 5
+      Code:
+        S3Bucket: "YOUR_CODE_BUCKET_NAME"
+        S3Key: "start-movie-convert.zip"
+  TriggerLambdaPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt 
+        - TriggerLambda
+        - Arn
+      Principal: "s3.amazonaws.com"
+      SourceArn: !Join 
+                  - ""
+                  - - "arn:aws:s3:::"
+                    - !Sub "src-movie-source-${AWS::AccountId}"
+  SrcS3Bucket:
+    Type: "AWS::S3::Bucket"
+    DependsOn: "TriggerLambdaPermission"
+    Properties:
+      BucketName: !Sub "src-movie-source-${AWS::AccountId}"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: mp4
+            Function: !GetAtt
+              - TriggerLambda
+              - Arn
+  MovieConvertRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "movie_convert_role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "mediaconvert.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"

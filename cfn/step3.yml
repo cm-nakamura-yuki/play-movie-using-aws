@@ -1,0 +1,69 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Step3 - S3BucketPolicy, Cloudfront OAI, Cloudfront, Cognito"
+Resources:
+  MovieDistBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: "dist-movie-source-YOUR_AWS_ACCOUNT_ID"
+      PolicyDocument:
+        Statement:
+          - Action: "s3:GetObject"
+            Effect: "Allow"
+            Resource: "arn:aws:s3:::dist-movie-source-YOUR_AWS_ACCOUNT_ID/*"
+            Principal:
+              AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOAI}"
+  CloudFrontOAI:
+    Type: "AWS::CloudFront::CloudFrontOriginAccessIdentity"
+    Properties:
+      CloudFrontOriginAccessIdentityConfig: 
+        Comment: ""
+  CloudFront:
+    Type: "AWS::CloudFront::Distribution"
+    Properties:
+      DistributionConfig:
+        DefaultRootObject: "index.html"
+        Enabled: true
+        Origins:
+          -
+            DomainName: "dist-movie-source-YOUR_AWS_ACCOUNT_ID.s3.amazonaws.com"
+            Id: "S3-dist-movie-source-YOUR_AWS_ACCOUNT_ID"
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOAI}"
+        DefaultCacheBehavior:
+          TargetOriginId: "S3-dist-movie-source-YOUR_AWS_ACCOUNT_ID"
+          ForwardedValues:
+            QueryString: false
+          ViewerProtocolPolicy: "redirect-to-https"
+  UnAuthRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "cognito_unauth_role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated:
+                - "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"
+  IdPool:
+    Type: "AWS::Cognito::IdentityPool"
+    Properties:
+      IdentityPoolName: "sample_movie_system"
+      AllowUnauthenticatedIdentities: true
+  IdPoolRoleAttachment:
+    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+    Properties:
+      IdentityPoolId: !Ref IdPool
+      Roles:
+        unauthenticated: !GetAtt
+          - UnAuthRole
+          - Arn
+Outputs:
+  CognitoIdPoolArn:
+    Description: "Cognito IdentityPool ARN"
+    Value: !Ref IdPool

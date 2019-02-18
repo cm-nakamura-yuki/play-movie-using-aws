@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>hls.js sample</title>
+    </head>
+    <body>
+        <h1>hls.js sample.</h1>
+        <ul id="movieList"></ul>
+        <script src="https://sdk.amazonaws.com/js/aws-sdk-2.311.0.min.js"></script>
+        <script>
+            AWS.config.region = 'ap-northeast-1';
+            AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+                IdentityPoolId: 'YOUR_COGNITO_ARN',
+            });
+            
+            let dynamo = new AWS.DynamoDB.DocumentClient();
+            let param = { 'TableName': 'movie_list' };
+            dynamo.scan(param, function(err, data) {
+                if (err) {
+                    console.log(err);
+                } else {
+                    let list = document.getElementById('movieList');
+                    let itemList = '';
+                    let items = data.Items;
+
+                    for (let i=0; i<items.length; i++) {
+                        itemList += '<a href="view.html?id=' + items[i].Name + '"><li>' + items[i].Name + '</li></a>';
+                    }
+
+                    console.log(itemList);
+                    list.innerHTML = itemList;
+                }
+            });
+        </script>
+    </body>
+</html>
